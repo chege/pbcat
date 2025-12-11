@@ -1,11 +1,11 @@
 # pbcat
 
-`pbcat` collects file contents and copies them to the system clipboard for quick sharing (e.g., with LLMs). It respects `.gitignore`, skips common build artifacts, and preserves deterministic ordering.
+`pbcat` is a fast CLI that gathers file contents and sends them to your clipboard for frictionless sharing (e.g., with LLMs). It respects `.gitignore`, skips build artifacts, dedupes inputs, and preserves deterministic ordering.
 
-## Usage
+## Quickstart
 
 ```
-pbcat [-s <separator>] [-H|--header] [--no-header] [--sort args|name] [-L|--list] <file|dir> [more ...]
+pbcat [-s <separator>] [-H|--header] [--no-header] [--sort args|name] [-L|--list] <file|dir> [...]
 ```
 
 - `-s, --separator` — insert text between files.
@@ -15,7 +15,21 @@ pbcat [-s <separator>] [-H|--header] [--no-header] [--sort args|name] [-L|--list
 - `-L, --list` — dry-run: list selected files and total bytes; do not touch the clipboard.
 - `--` — end option parsing.
 
-Features:
+Examples:
+
+```
+# Copy a few files with headers and blank separator
+pbcat -H file1.rs file2.rs
+
+# Copy a directory tree with separators, sorted by name
+pbcat --sort name -s "\n---\n" src/
+
+# Dry-run to see what would be copied
+pbcat -L src/ README.md
+```
+
+## Features
+
 - Accepts files and directories; walks directories recursively.
 - Respects `.gitignore` (root and nested), git excludes, and common build dirs (e.g., `target`, `node_modules`, `DerivedData`).
 - Deduplicates files seen via multiple paths.
@@ -54,6 +68,12 @@ Build without installing:
 cargo build --release
 ln -sf "$(pwd)/target/release/pbcat" /usr/local/bin/pbcat
 ```
+
+## Clipboard backends
+- macOS: `pbcopy`
+- Linux: `wl-copy`, `xclip`, or `xsel`
+- Windows: `clip` or `powershell -Command Set-Clipboard`
+- Tests/dev: set `PBCAT_CLIPBOARD_FILE=/tmp/pbcat.out` to write there instead of the clipboard.
 
 ## Helpful `just` recipes
 
