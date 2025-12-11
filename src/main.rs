@@ -288,7 +288,9 @@ fn gather_contents(
             buffer.push_str(&format!("== {} ==\n", display(path)));
         }
         buffer.push_str(&text);
-        if let Some(sep) = separator && idx + 1 < paths.len() {
+        if let Some(sep) = separator
+            && idx + 1 < paths.len()
+        {
             buffer.push_str(sep);
         }
     }
@@ -314,7 +316,9 @@ fn write_files<W: Write>(
         total += bytes.len();
         out.write_all(bytes.as_bytes())?;
 
-        if let Some(sep) = separator && idx + 1 < paths.len() {
+        if let Some(sep) = separator
+            && idx + 1 < paths.len()
+        {
             total += sep.len();
             out.write_all(sep.as_bytes())?;
         }
