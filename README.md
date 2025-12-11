@@ -54,6 +54,13 @@ cargo build --release
 ln -sf "$(pwd)/target/release/pbcat" /usr/local/bin/pbcat
 ```
 
+## Helpful `just` recipes
+
+- `just` — list tasks.
+- `just verify` — `cargo fmt -- --check`
+- `just test` — `cargo test`
+- `just clippy` — `cargo clippy --all-targets -- -D warnings`
+
 ## Development
 
 - Run tests: `cargo test`
