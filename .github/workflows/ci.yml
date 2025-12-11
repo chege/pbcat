@@ -26,3 +26,43 @@ jobs:
 
       - name: Test
         run: cargo test
+
+  linux-distros:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ubuntu:22.04
+          - debian:bookworm
+          - fedora:latest
+          - archlinux:latest
+          - alpine:3.19
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain dependencies
+        shell: bash
+        run: |
+          case "${{ matrix.image }}" in
+            ubuntu:*|debian:*) apt-get update && apt-get install -y curl build-essential pkg-config ca-certificates && rm -rf /var/lib/apt/lists/* ;;
+            fedora:*) dnf install -y curl make gcc pkgconfig ca-certificates && dnf clean all ;;
+            archlinux:*) pacman -Syu --noconfirm base-devel curl pkgconf ca-certificates ;;
+            alpine:*) apk add --no-cache build-base curl pkgconfig ca-certificates ;;
+          esac
+
+      - name: Install Rust
+        shell: bash
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal
+          . "$HOME/.cargo/env"
+          rustup component add rustfmt clippy
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Test
+        shell: bash
+        run: |
+          . "$HOME/.cargo/env"
+          cargo test
