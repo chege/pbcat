@@ -5,12 +5,13 @@
 ## Usage
 
 ```
-pbcat [-s <separator>] [-H|--header] [--sort args|name] <file|dir> [more ...]
+pbcat [-s <separator>] [-H|--header] [--sort args|name] [-L|--list] <file|dir> [more ...]
 ```
 
 - `-s, --separator` — insert text between files.
 - `-H, --header` — prefix each file with a header `== <path> ==`.
 - `--sort args|name` — preserve argument order (default) or sort by path name.
+- `-L, --list` — dry-run: list selected files and total bytes; do not touch the clipboard.
 - `--` — end option parsing.
 
 Features:
@@ -22,6 +23,8 @@ Features:
 Clipboard utilities:
 - macOS: `pbcopy`
 - Linux: `wl-copy`, `xclip`, or `xsel`
+- Windows: `clip` or `powershell -Command Set-Clipboard`
+- Tests/dev: set `PBCAT_CLIPBOARD_FILE=/tmp/pbcat.out` to write there instead of the clipboard.
 
 ## Install
 

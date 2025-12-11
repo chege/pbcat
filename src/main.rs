@@ -10,12 +10,21 @@ use std::process::{Command, ExitCode, Stdio};
 fn main() -> ExitCode {
     match run() {
         Ok(summary) => {
-            println!(
-                "Copied {} file{} ({} bytes) to clipboard",
-                summary.files,
-                if summary.files == 1 { "" } else { "s" },
-                summary.bytes
-            );
+            if summary.listed {
+                println!(
+                    "Listed {} file{} ({} bytes)",
+                    summary.files,
+                    if summary.files == 1 { "" } else { "s" },
+                    summary.bytes
+                );
+            } else {
+                println!(
+                    "Copied {} file{} ({} bytes) to clipboard",
+                    summary.files,
+                    if summary.files == 1 { "" } else { "s" },
+                    summary.bytes
+                );
+            }
             ExitCode::SUCCESS
         }
         Err(err) => {
@@ -28,12 +37,14 @@ fn main() -> ExitCode {
 struct CopySummary {
     files: usize,
     bytes: usize,
+    listed: bool,
 }
 
 struct Options {
     separator: Option<String>,
     header: bool,
     sort: SortMode,
+    list_only: bool,
     inputs: Vec<PathBuf>,
 }
 
@@ -67,11 +78,24 @@ fn run() -> Result<CopySummary, Box<dyn Error>> {
         return Err("No files to copy".into());
     }
 
+    if options.list_only {
+        let bytes = total_bytes(&files)?;
+        for path in &files {
+            println!("{}", display(path));
+        }
+        return Ok(CopySummary {
+            files: files.len(),
+            bytes,
+            listed: true,
+        });
+    }
+
     let bytes = copy_files_to_clipboard(&files, options.separator.as_deref(), options.header)?;
 
     Ok(CopySummary {
         files: files.len(),
         bytes,
+        listed: false,
     })
 }
 
@@ -80,6 +104,7 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
     let mut separator: Option<String> = None;
     let mut header = false;
     let mut sort = SortMode::Args;
+    let mut list_only = false;
     let mut args = env::args_os().skip(1).peekable();
     let mut end_of_options = false;
 
@@ -109,6 +134,10 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
                 sort = parse_sort(&value)?;
                 continue;
             }
+            if arg == "-L" || arg == "--list" {
+                list_only = true;
+                continue;
+            }
             if arg.to_string_lossy().starts_with('-') && arg != "-" {
                 return Err(format!("Unknown option: {}", arg.to_string_lossy()).into());
             }
@@ -118,7 +147,7 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
 
     if inputs.is_empty() {
         return Err(
-            "Usage: pbcat [-s <separator>] [-H|--header] [--sort name|args] <file|dir> [more ...]"
+            "Usage: pbcat [-s <separator>] [-H|--header] [--sort name|args] [-L|--list] <file|dir> [more ...]"
                 .into(),
         );
     }
@@ -127,6 +156,7 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
         separator,
         header,
         sort,
+        list_only,
         inputs,
     })
 }
@@ -170,6 +200,17 @@ fn order_files(mut files: Vec<PathBuf>, sort: SortMode) -> Vec<PathBuf> {
             files
         }
     }
+}
+
+fn total_bytes(paths: &[PathBuf]) -> Result<usize, Box<dyn Error>> {
+    let mut total: usize = 0;
+    for path in paths {
+        let meta = fs::metadata(path).map_err(|e| format!("{}: {}", display(path), e))?;
+        let len = meta.len();
+        let add = usize::try_from(len).unwrap_or_else(|_| usize::MAX.saturating_sub(total));
+        total = total.saturating_add(add);
+    }
+    Ok(total)
 }
 
 fn collect_dir(
@@ -290,7 +331,7 @@ fn copy_files_to_clipboard(
     files: &[PathBuf],
     separator: Option<&str>,
     header: bool,
-    ) -> Result<usize, Box<dyn Error>> {
+) -> Result<usize, Box<dyn Error>> {
     if let Ok(path) = env::var("PBCAT_CLIPBOARD_FILE") {
         let file = fs::File::create(path)?;
         return write_files(files, separator, header, file);
@@ -322,9 +363,11 @@ fn copy_files_to_clipboard(
         }
     }
 
-    Err(last_err.unwrap_or_else(|| {
-        "No supported clipboard utility found (tried pbcopy/wl-copy/xclip/xsel)".to_string()
-    }).into())
+    Err(last_err
+        .unwrap_or_else(|| {
+            "No supported clipboard utility found (tried pbcopy/wl-copy/xclip/xsel)".to_string()
+        })
+        .into())
 }
 
 struct ClipboardTool {
@@ -358,7 +401,21 @@ fn preferred_clipboard_tools() -> Vec<ClipboardTool> {
     ]
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(target_os = "windows")]
+fn preferred_clipboard_tools() -> Vec<ClipboardTool> {
+    vec![
+        ClipboardTool {
+            program: "clip",
+            args: &[],
+        },
+        ClipboardTool {
+            program: "powershell",
+            args: &["-NoProfile", "-Command", "Set-Clipboard"],
+        },
+    ]
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 fn preferred_clipboard_tools() -> Vec<ClipboardTool> {
     Vec::new()
 }
