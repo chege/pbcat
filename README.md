@@ -43,7 +43,15 @@ Clipboard utilities:
 
 ## Install
 
-Install into Cargo’s global bin dir (`~/.cargo/bin`):
+Quick install (macOS/Linux):
+
+```
+curl -fsSL https://raw.githubusercontent.com/chege/pbcat/main/scripts/install.sh | INSTALL_DIR=/usr/local/bin sh
+```
+
+`INSTALL_DIR` is optional; defaults to `/usr/local/bin`. Artifacts are pulled from the latest GitHub release.
+
+Install from source into Cargo’s global bin dir (`~/.cargo/bin`):
 
 ```
 cargo install --path . --locked
