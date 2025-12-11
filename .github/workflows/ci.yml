@@ -27,6 +27,13 @@ jobs:
       - name: Test
         run: cargo test
 
+      - name: Smoke run (clipboard file)
+        run: |
+          export PBCAT_CLIPBOARD_FILE=$(mktemp)
+          echo "hello" > sample.txt
+          cargo run -- sample.txt
+          cat "$PBCAT_CLIPBOARD_FILE"
+
   linux-distros:
     runs-on: ubuntu-latest
     strategy:
