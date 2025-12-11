@@ -418,21 +418,7 @@ fn preferred_clipboard_tools() -> Vec<ClipboardTool> {
     ]
 }
 
-#[cfg(target_os = "windows")]
-fn preferred_clipboard_tools() -> Vec<ClipboardTool> {
-    vec![
-        ClipboardTool {
-            program: "clip",
-            args: &[],
-        },
-        ClipboardTool {
-            program: "powershell",
-            args: &["-NoProfile", "-Command", "Set-Clipboard"],
-        },
-    ]
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn preferred_clipboard_tools() -> Vec<ClipboardTool> {
     Vec::new()
 }

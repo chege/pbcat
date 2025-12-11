@@ -72,7 +72,6 @@ ln -sf "$(pwd)/target/release/pbcat" /usr/local/bin/pbcat
 ## Clipboard backends
 - macOS: `pbcopy`
 - Linux: `wl-copy`, `xclip`, or `xsel`
-- Windows: `clip` or `powershell -Command Set-Clipboard`
 - Tests/dev: set `PBCAT_CLIPBOARD_FILE=/tmp/pbcat.out` to write there instead of the clipboard.
 
 ## Helpful `just` recipes

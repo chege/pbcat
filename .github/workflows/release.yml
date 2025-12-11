@@ -17,9 +17,6 @@ jobs:
           - os: macos-latest
             ext: ""
             asset_suffix: macos-universal
-          - os: windows-latest
-            ext: ".exe"
-            asset_suffix: windows-x86_64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
