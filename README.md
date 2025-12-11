@@ -60,6 +60,7 @@ ln -sf "$(pwd)/target/release/pbcat" /usr/local/bin/pbcat
 - `just verify` — `cargo fmt -- --check`
 - `just test` — `cargo test`
 - `just clippy` — `cargo clippy --all-targets -- -D warnings`
+- `just install` — `cargo install --path . --locked`
 
 ## Development
 
