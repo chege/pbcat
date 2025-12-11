@@ -46,10 +46,10 @@ Clipboard utilities:
 Quick install (macOS/Linux):
 
 ```
-curl -fsSL https://raw.githubusercontent.com/chege/pbcat/main/scripts/install.sh | INSTALL_DIR=/usr/local/bin sh
+curl -fsSL https://raw.githubusercontent.com/chege/pbcat/main/scripts/install.sh | sh
 ```
 
-`INSTALL_DIR` is optional; defaults to `/usr/local/bin`. Artifacts are pulled from the latest GitHub release.
+`INSTALL_DIR` is optional; defaults to `$HOME/.local/bin` (user-writable). Ensure it's on your PATH. Artifacts are pulled from the latest GitHub release.
 
 If the download fails or a release asset is unavailable, install from source instead:
 

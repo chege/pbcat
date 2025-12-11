@@ -18,7 +18,7 @@ case "$os" in
   *) echo "Unsupported OS: $os" >&2; exit 1 ;;
 esac
 
-install_dir="${INSTALL_DIR:-/usr/local/bin}"
+install_dir="${INSTALL_DIR:-$HOME/.local/bin}"
 
 if [ ! -d "$install_dir" ]; then
   echo "Creating install dir $install_dir"

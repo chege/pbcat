@@ -1,0 +1,96 @@
+name: Release (latest)
+run-name: Release (latest) - ${{ github.event.workflow_run.head_branch }} @ ${{ github.event.workflow_run.head_sha }}
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: ["completed"]
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build (Linux x86_64)
+        run: |
+          cargo build --release --locked
+          mkdir -p dist
+          cp target/release/pbcat dist/pbcat-linux-x86_64
+          tar -czf dist/pbcat-linux-x86_64.tar.gz -C dist pbcat-linux-x86_64
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: dist/pbcat-linux-x86_64.tar.gz
+
+  build-macos:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build (macOS universal)
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+          mkdir -p dist
+          lipo -create \
+            target/aarch64-apple-darwin/release/pbcat \
+            target/x86_64-apple-darwin/release/pbcat \
+            -output dist/pbcat-macos-universal
+          tar -czf dist/pbcat-macos-universal.tar.gz -C dist pbcat-macos-universal
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-universal
+          path: dist/pbcat-macos-universal.tar.gz
+
+  release-latest:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-22.04
+    needs: [build-linux, build-macos]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-x86_64
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-universal
+          path: dist
+      - name: Delete existing 'latest' release (if any)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tag = 'latest';
+            try {
+              const release = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+              await github.rest.repos.deleteRelease({ owner, repo, release_id: release.data.id });
+              // delete tag ref
+              await github.rest.git.deleteRef({ owner, repo, ref: 'tags/' + tag });
+              core.info('Deleted existing latest release and tag');
+            } catch (e) {
+              core.info('No prior latest release');
+            }
+      - name: Create/Update GitHub Release tagged 'latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build
+          files: |
+            dist/pbcat-linux-x86_64.tar.gz
+            dist/pbcat-macos-universal.tar.gz
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
