@@ -1,3 +1,5 @@
+use ignore::WalkBuilder;
+use std::collections::HashSet;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -34,13 +36,66 @@ fn run() -> Result<CopySummary, Box<dyn Error>> {
         return Err("Usage: pbcat <file> [file ...]".into());
     }
 
-    let contents = gather_contents(&args)?;
+    let files = collect_files(&args)?;
+    if files.is_empty() {
+        return Err("No files to copy".into());
+    }
+
+    let contents = gather_contents(&files)?;
     copy_to_clipboard(&contents)?;
 
     Ok(CopySummary {
-        files: args.len(),
+        files: files.len(),
         bytes: contents.as_bytes().len(),
     })
+}
+
+fn collect_files(inputs: &[PathBuf]) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+    let mut files = Vec::new();
+    let mut seen = HashSet::new();
+
+    for input in inputs {
+        let metadata = fs::metadata(input).map_err(|e| format!("{}: {}", display(input), e))?;
+        if metadata.is_file() {
+            add_file(input, &mut files, &mut seen)?;
+            continue;
+        }
+        if metadata.is_dir() {
+            collect_dir(input, &mut files, &mut seen)?;
+            continue;
+        }
+        return Err(format!("{}: not a file or directory", display(input)).into());
+    }
+
+    Ok(files)
+}
+
+fn collect_dir(dir: &PathBuf, files: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) -> Result<(), Box<dyn Error>> {
+    let walker = WalkBuilder::new(dir)
+        .standard_filters(true)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .add_custom_ignore_filename(".gitignore")
+        .sort_by_file_name(|a, b| a.cmp(b))
+        .build();
+
+    for entry in walker {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+            add_file(&entry.into_path(), files, seen)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn add_file(path: &PathBuf, files: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) -> Result<(), Box<dyn Error>> {
+    let canonical = fs::canonicalize(path).map_err(|e| format!("{}: {}", display(path), e))?;
+    if seen.insert(canonical.clone()) {
+        files.push(canonical);
+    }
+    Ok(())
 }
 
 fn gather_contents(paths: &[PathBuf]) -> Result<String, Box<dyn Error>> {
@@ -165,6 +220,43 @@ mod tests {
         let missing = tempdir().join("missing.txt");
         let err = gather_contents(&[missing]).unwrap_err();
         assert!(err.to_string().contains("No such file"));
+    }
+
+    #[test]
+    fn collects_directory_recursively_respecting_gitignore() {
+        let dir = tempdir();
+        let ignored = dir.join("skip.log");
+        let keep = dir.join("keep.txt");
+        let nested_dir = dir.join("nested");
+        let nested_keep = nested_dir.join("inner.txt");
+
+        write_file(&keep, "keep").unwrap();
+        fs::create_dir_all(&nested_dir).unwrap();
+        write_file(&nested_keep, "inner").unwrap();
+        write_file(&ignored, "skip").unwrap();
+        write_file(&dir.join(".gitignore"), "*.log\n").unwrap();
+
+        let files = collect_files(&[dir.clone()]).unwrap();
+        let names: Vec<_> = files
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+
+        assert_eq!(names, vec!["keep.txt", "inner.txt"]);
+    }
+
+    #[test]
+    fn dedupes_files_seen_via_args_and_directory_walk() {
+        let dir = tempdir();
+        let file = dir.join("one.txt");
+        write_file(&file, "once").unwrap();
+
+        let files = collect_files(&[file.clone(), dir]).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(
+            files[0].file_name().unwrap().to_string_lossy(),
+            "one.txt"
+        );
     }
 
     fn tempdir() -> PathBuf {
