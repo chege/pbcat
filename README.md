@@ -5,11 +5,12 @@
 ## Usage
 
 ```
-pbcat [-s <separator>] [-H|--header] [--sort args|name] [-L|--list] <file|dir> [more ...]
+pbcat [-s <separator>] [-H|--header] [--no-header] [--sort args|name] [-L|--list] <file|dir> [more ...]
 ```
 
 - `-s, --separator` — insert text between files.
-- `-H, --header` — prefix each file with a header `== <path> ==`.
+- `-H, --header` — force headers for each file.
+- `--no-header` — disable headers (by default headers are auto-enabled when copying multiple files).
 - `--sort args|name` — preserve argument order (default) or sort by path name.
 - `-L, --list` — dry-run: list selected files and total bytes; do not touch the clipboard.
 - `--` — end option parsing.

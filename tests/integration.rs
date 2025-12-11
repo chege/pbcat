@@ -17,7 +17,6 @@ fn end_to_end_with_separator_header_and_sort() {
     cmd.env("PBCAT_CLIPBOARD_FILE", &out)
         .arg("--sort")
         .arg("name")
-        .arg("-H")
         .arg("-s")
         .arg("\n---\n")
         .arg(a.clone())
@@ -58,6 +57,28 @@ fn list_mode_prints_files_and_skips_clipboard() {
         fs::metadata(&out).is_err(),
         "clipboard file should not be written in list mode"
     );
+}
+
+#[test]
+fn no_header_flag_removes_headers() {
+    let tmp = tempdir().unwrap();
+    let out = tmp.path().join("clipboard.txt");
+
+    let first = write(tmp.path(), "first.txt", "one");
+    let second = write(tmp.path(), "second.txt", "two");
+
+    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("pbcat"));
+    cmd.env("PBCAT_CLIPBOARD_FILE", &out)
+        .arg("--no-header")
+        .arg("-s")
+        .arg("\n---\n")
+        .arg(&first)
+        .arg(&second);
+
+    cmd.assert().success();
+
+    let got = fs::read_to_string(&out).unwrap();
+    assert_eq!(got, "one\n---\ntwo");
 }
 
 fn write(base: &Path, name: &str, contents: &str) -> PathBuf {

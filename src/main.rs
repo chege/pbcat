@@ -42,7 +42,7 @@ struct CopySummary {
 
 struct Options {
     separator: Option<String>,
-    header: bool,
+    header: HeaderMode,
     sort: SortMode,
     list_only: bool,
     inputs: Vec<PathBuf>,
@@ -52,6 +52,13 @@ struct Options {
 enum SortMode {
     Args,
     Name,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum HeaderMode {
+    Auto,
+    On,
+    Off,
 }
 
 const SKIP_DIR_NAMES: &[&str] = &[
@@ -78,6 +85,12 @@ fn run() -> Result<CopySummary, Box<dyn Error>> {
         return Err("No files to copy".into());
     }
 
+    let header_enabled = match options.header {
+        HeaderMode::Auto => files.len() > 1,
+        HeaderMode::On => true,
+        HeaderMode::Off => false,
+    };
+
     if options.list_only {
         let bytes = total_bytes(&files)?;
         for path in &files {
@@ -90,7 +103,7 @@ fn run() -> Result<CopySummary, Box<dyn Error>> {
         });
     }
 
-    let bytes = copy_files_to_clipboard(&files, options.separator.as_deref(), options.header)?;
+    let bytes = copy_files_to_clipboard(&files, options.separator.as_deref(), header_enabled)?;
 
     Ok(CopySummary {
         files: files.len(),
@@ -102,7 +115,7 @@ fn run() -> Result<CopySummary, Box<dyn Error>> {
 fn parse_args() -> Result<Options, Box<dyn Error>> {
     let mut inputs = Vec::new();
     let mut separator: Option<String> = None;
-    let mut header = false;
+    let mut header = HeaderMode::Auto;
     let mut sort = SortMode::Args;
     let mut list_only = false;
     let mut args = env::args_os().skip(1).peekable();
@@ -126,7 +139,11 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
                 continue;
             }
             if arg == "-H" || arg == "--header" {
-                header = true;
+                header = HeaderMode::On;
+                continue;
+            }
+            if arg == "--no-header" {
+                header = HeaderMode::Off;
                 continue;
             }
             if arg == "--sort" {
@@ -147,7 +164,7 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
 
     if inputs.is_empty() {
         return Err(
-            "Usage: pbcat [-s <separator>] [-H|--header] [--sort name|args] [-L|--list] <file|dir> [more ...]"
+            "Usage: pbcat [-s <separator>] [-H|--header] [--no-header] [--sort name|args] [-L|--list] <file|dir> [more ...]"
                 .into(),
         );
     }
