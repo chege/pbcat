@@ -29,10 +29,32 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 asset="pbcat-${target}.tar.gz"
-url="https://github.com/${OWNER}/${REPO}/releases/latest/download/${asset}"
+release_ref="${RELEASE_TAG:-latest}"
 
-echo "Downloading $url"
-curl -fsSL "$url" -o "$tmp/pbcat.tgz"
+if [ "$release_ref" = "latest" ]; then
+  api_url="https://api.github.com/repos/${OWNER}/${REPO}/releases/latest"
+else
+  api_url="https://api.github.com/repos/${OWNER}/${REPO}/releases/tags/${release_ref}"
+fi
+
+echo "Resolving asset for ${release_ref} (${asset})..."
+asset_url="$(
+  curl -fsSL "$api_url" \
+  | awk -F'"' -v pat="$asset" '/browser_download_url/ { if ($4 ~ pat) { print $4 } }' \
+  | head -n1
+)"
+
+if [ -z "$asset_url" ]; then
+  echo "Could not find asset $asset at $api_url" >&2
+  echo "You can install from source instead: cargo install --git https://github.com/${OWNER}/${REPO}.git --locked" >&2
+  exit 1
+fi
+
+echo "Downloading $asset_url"
+if ! curl -fL "$asset_url" -o "$tmp/pbcat.tgz"; then
+  echo "Download failed. Install from source: cargo install --git https://github.com/${OWNER}/${REPO}.git --locked" >&2
+  exit 1
+fi
 
 echo "Extracting..."
 tar -xzf "$tmp/pbcat.tgz" -C "$tmp"

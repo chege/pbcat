@@ -51,6 +51,12 @@ curl -fsSL https://raw.githubusercontent.com/chege/pbcat/main/scripts/install.sh
 
 `INSTALL_DIR` is optional; defaults to `/usr/local/bin`. Artifacts are pulled from the latest GitHub release.
 
+If the download fails or a release asset is unavailable, install from source instead:
+
+```
+cargo install --git https://github.com/chege/pbcat.git --locked
+```
+
 Install from source into Cargo’s global bin dir (`~/.cargo/bin`):
 
 ```
