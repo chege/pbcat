@@ -1,4 +1,5 @@
-default: test
+default:
+    just --list
 
 verify:
     cargo fmt -- --check
