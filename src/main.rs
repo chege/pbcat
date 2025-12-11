@@ -1,4 +1,4 @@
-use ignore::WalkBuilder;
+use ignore::{DirEntry, WalkBuilder};
 use std::collections::HashSet;
 use std::env;
 use std::error::Error;
@@ -34,6 +34,21 @@ struct Options {
     separator: Option<String>,
     inputs: Vec<PathBuf>,
 }
+
+const SKIP_DIR_NAMES: &[&str] = &[
+    "DerivedData",
+    "Pods",
+    "target",
+    "node_modules",
+    "build",
+    ".build",
+    ".gradle",
+    "Carthage",
+    "buck-out",
+    "__pycache__",
+    ".idea",
+    ".git",
+];
 
 fn run() -> Result<CopySummary, Box<dyn Error>> {
     let options = parse_args()?;
@@ -116,6 +131,16 @@ fn collect_dir(dir: &PathBuf, files: &mut Vec<PathBuf>, seen: &mut HashSet<PathB
         .git_global(true)
         .git_exclude(true)
         .add_custom_ignore_filename(".gitignore")
+        .filter_entry(|entry| {
+            if entry.depth() == 0 {
+                return true;
+            }
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                !should_skip_dir(entry)
+            } else {
+                true
+            }
+        })
         .sort_by_file_name(|a, b| a.cmp(b))
         .build();
 
@@ -135,6 +160,14 @@ fn add_file(path: &PathBuf, files: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf
         files.push(canonical);
     }
     Ok(())
+}
+
+fn should_skip_dir(entry: &DirEntry) -> bool {
+    entry
+        .file_name()
+        .to_str()
+        .map(|name| SKIP_DIR_NAMES.contains(&name))
+        .unwrap_or(false)
 }
 
 fn gather_contents(paths: &[PathBuf], separator: Option<&str>) -> Result<String, Box<dyn Error>> {
@@ -314,6 +347,26 @@ mod tests {
 
         let combined = gather_contents(&[first, second], Some("\n---\n")).unwrap();
         assert_eq!(combined, "alpha\n---\nbeta");
+    }
+
+    #[test]
+    fn skips_known_build_dirs() {
+        let dir = tempdir();
+        let derived = dir.join("DerivedData");
+        let nested = derived.join("output.txt");
+        let keep = dir.join("keep.txt");
+
+        fs::create_dir_all(derived).unwrap();
+        write_file(&nested, "should_skip").unwrap();
+        write_file(&keep, "keep").unwrap();
+
+        let files = collect_files(&[dir]).unwrap();
+        let names: Vec<_> = files
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+
+        assert_eq!(names, vec!["keep.txt"]);
     }
 
     fn tempdir() -> PathBuf {
