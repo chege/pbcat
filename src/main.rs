@@ -173,7 +173,11 @@ fn order_files(mut files: Vec<PathBuf>, sort: SortMode) -> Vec<PathBuf> {
     }
 }
 
-fn collect_dir(dir: &PathBuf, files: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) -> Result<(), Box<dyn Error>> {
+fn collect_dir(
+    dir: &PathBuf,
+    files: &mut Vec<PathBuf>,
+    seen: &mut HashSet<PathBuf>,
+) -> Result<(), Box<dyn Error>> {
     let walker = WalkBuilder::new(dir)
         .standard_filters(true)
         .git_ignore(true)
@@ -203,7 +207,11 @@ fn collect_dir(dir: &PathBuf, files: &mut Vec<PathBuf>, seen: &mut HashSet<PathB
     Ok(())
 }
 
-fn add_file(path: &PathBuf, files: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) -> Result<(), Box<dyn Error>> {
+fn add_file(
+    path: &PathBuf,
+    files: &mut Vec<PathBuf>,
+    seen: &mut HashSet<PathBuf>,
+) -> Result<(), Box<dyn Error>> {
     let canonical = fs::canonicalize(path).map_err(|e| format!("{}: {}", display(path), e))?;
     if seen.insert(canonical.clone()) {
         files.push(canonical);
@@ -219,7 +227,11 @@ fn should_skip_dir(entry: &DirEntry) -> bool {
         .unwrap_or(false)
 }
 
-fn gather_contents(paths: &[PathBuf], separator: Option<&str>, header: bool) -> Result<String, Box<dyn Error>> {
+fn gather_contents(
+    paths: &[PathBuf],
+    separator: Option<&str>,
+    header: bool,
+) -> Result<String, Box<dyn Error>> {
     let mut buffer = String::new();
 
     for (idx, path) in paths.iter().enumerate() {
@@ -229,8 +241,8 @@ fn gather_contents(paths: &[PathBuf], separator: Option<&str>, header: bool) -> 
         }
 
         let bytes = fs::read(path).map_err(|e| format!("{}: {}", display(path), e))?;
-        let text = String::from_utf8(bytes)
-            .map_err(|_| format!("{}: not valid UTF-8", display(path)))?;
+        let text =
+            String::from_utf8(bytes).map_err(|_| format!("{}: not valid UTF-8", display(path)))?;
         if header {
             buffer.push_str(&format!("== {} ==\n", display(path)));
         }
@@ -387,10 +399,7 @@ mod tests {
 
         let files = collect_files(&[file.clone(), dir]).unwrap();
         assert_eq!(files.len(), 1);
-        assert_eq!(
-            files[0].file_name().unwrap().to_string_lossy(),
-            "one.txt"
-        );
+        assert_eq!(files[0].file_name().unwrap().to_string_lossy(), "one.txt");
     }
 
     #[test]
