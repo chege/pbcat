@@ -246,6 +246,11 @@ fn gather_contents(paths: &[PathBuf], separator: Option<&str>, header: bool) -> 
 }
 
 fn copy_to_clipboard(data: &str) -> Result<(), Box<dyn Error>> {
+    if let Ok(path) = env::var("PBCAT_CLIPBOARD_FILE") {
+        fs::write(path, data)?;
+        return Ok(());
+    }
+
     for tool in preferred_clipboard_tools() {
         if attempt_copy(tool, data).is_ok() {
             return Ok(());
