@@ -30,24 +30,63 @@ struct CopySummary {
     bytes: usize,
 }
 
-fn run() -> Result<CopySummary, Box<dyn Error>> {
-    let args: Vec<PathBuf> = env::args_os().skip(1).map(PathBuf::from).collect();
-    if args.is_empty() {
-        return Err("Usage: pbcat <file> [file ...]".into());
-    }
+struct Options {
+    separator: Option<String>,
+    inputs: Vec<PathBuf>,
+}
 
-    let files = collect_files(&args)?;
+fn run() -> Result<CopySummary, Box<dyn Error>> {
+    let options = parse_args()?;
+
+    let files = collect_files(&options.inputs)?;
     if files.is_empty() {
         return Err("No files to copy".into());
     }
 
-    let contents = gather_contents(&files)?;
+    let contents = gather_contents(&files, options.separator.as_deref())?;
     copy_to_clipboard(&contents)?;
 
     Ok(CopySummary {
         files: files.len(),
         bytes: contents.as_bytes().len(),
     })
+}
+
+fn parse_args() -> Result<Options, Box<dyn Error>> {
+    let mut inputs = Vec::new();
+    let mut separator: Option<String> = None;
+    let mut args = env::args_os().skip(1).peekable();
+    let mut end_of_options = false;
+
+    while let Some(arg) = args.next() {
+        if !end_of_options {
+            if arg == "--" {
+                end_of_options = true;
+                continue;
+            }
+            if arg == "-s" || arg == "--separator" {
+                let value = args
+                    .next()
+                    .ok_or("Missing value for separator (-s/--separator)")?;
+                separator = Some(
+                    value
+                        .into_string()
+                        .map_err(|_| "Separator must be valid UTF-8")?,
+                );
+                continue;
+            }
+            if arg.to_string_lossy().starts_with('-') && arg != "-" {
+                return Err(format!("Unknown option: {}", arg.to_string_lossy()).into());
+            }
+        }
+        inputs.push(PathBuf::from(arg));
+    }
+
+    if inputs.is_empty() {
+        return Err("Usage: pbcat [-s <separator>] <file|dir> [more ...]".into());
+    }
+
+    Ok(Options { separator, inputs })
 }
 
 fn collect_files(inputs: &[PathBuf]) -> Result<Vec<PathBuf>, Box<dyn Error>> {
@@ -98,10 +137,10 @@ fn add_file(path: &PathBuf, files: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf
     Ok(())
 }
 
-fn gather_contents(paths: &[PathBuf]) -> Result<String, Box<dyn Error>> {
+fn gather_contents(paths: &[PathBuf], separator: Option<&str>) -> Result<String, Box<dyn Error>> {
     let mut buffer = String::new();
 
-    for path in paths {
+    for (idx, path) in paths.iter().enumerate() {
         let metadata = fs::metadata(path).map_err(|e| format!("{}: {}", display(path), e))?;
         if !metadata.is_file() {
             return Err(format!("{}: not a file", display(path)).into());
@@ -111,6 +150,11 @@ fn gather_contents(paths: &[PathBuf]) -> Result<String, Box<dyn Error>> {
         let text = String::from_utf8(bytes)
             .map_err(|_| format!("{}: not valid UTF-8", display(path)))?;
         buffer.push_str(&text);
+        if let Some(sep) = separator {
+            if idx + 1 < paths.len() {
+                buffer.push_str(sep);
+            }
+        }
     }
 
     Ok(buffer)
@@ -201,7 +245,7 @@ mod tests {
         write_file(&first, "hello").unwrap();
         write_file(&second, "world").unwrap();
 
-        let combined = gather_contents(&[first, second]).unwrap();
+        let combined = gather_contents(&[first, second], None).unwrap();
         assert_eq!(combined, "helloworld");
     }
 
@@ -211,14 +255,14 @@ mod tests {
         let subdir = dir.join("folder");
         fs::create_dir(&subdir).unwrap();
 
-        let err = gather_contents(&[subdir]).unwrap_err();
+        let err = gather_contents(&[subdir], None).unwrap_err();
         assert!(err.to_string().contains("not a file"));
     }
 
     #[test]
     fn errors_on_missing_file() {
         let missing = tempdir().join("missing.txt");
-        let err = gather_contents(&[missing]).unwrap_err();
+        let err = gather_contents(&[missing], None).unwrap_err();
         assert!(err.to_string().contains("No such file"));
     }
 
@@ -257,6 +301,19 @@ mod tests {
             files[0].file_name().unwrap().to_string_lossy(),
             "one.txt"
         );
+    }
+
+    #[test]
+    fn inserts_separator_between_files() {
+        let dir = tempdir();
+        let first = dir.join("a.txt");
+        let second = dir.join("b.txt");
+
+        write_file(&first, "alpha").unwrap();
+        write_file(&second, "beta").unwrap();
+
+        let combined = gather_contents(&[first, second], Some("\n---\n")).unwrap();
+        assert_eq!(combined, "alpha\n---\nbeta");
     }
 
     fn tempdir() -> PathBuf {
