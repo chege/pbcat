@@ -23,6 +23,34 @@ Clipboard utilities:
 - macOS: `pbcopy`
 - Linux: `wl-copy`, `xclip`, or `xsel`
 
+## Install
+
+Install into Cargo’s global bin dir (`~/.cargo/bin`):
+
+```
+cargo install --path . --locked
+```
+
+Ensure `~/.cargo/bin` is on `PATH` (zsh):
+
+```
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Run the binary:
+
+```
+pbcat --help
+```
+
+Build without installing:
+
+```
+cargo build --release
+ln -sf "$(pwd)/target/release/pbcat" /usr/local/bin/pbcat
+```
+
 ## Development
 
 - Run tests: `cargo test`
