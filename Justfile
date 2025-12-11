@@ -6,3 +6,6 @@ verify:
 
 test:
     cargo test
+
+clippy:
+    cargo clippy --all-targets -- -D warnings

@@ -196,7 +196,7 @@ fn order_files(mut files: Vec<PathBuf>, sort: SortMode) -> Vec<PathBuf> {
     match sort {
         SortMode::Args => files,
         SortMode::Name => {
-            files.sort_by(|a, b| a.cmp(b));
+            files.sort();
             files
         }
     }
@@ -288,10 +288,8 @@ fn gather_contents(
             buffer.push_str(&format!("== {} ==\n", display(path)));
         }
         buffer.push_str(&text);
-        if let Some(sep) = separator {
-            if idx + 1 < paths.len() {
-                buffer.push_str(sep);
-            }
+        if let Some(sep) = separator && idx + 1 < paths.len() {
+            buffer.push_str(sep);
         }
     }
 
@@ -310,17 +308,15 @@ fn write_files<W: Write>(
         let bytes = fs::read_to_string(path).map_err(|e| format!("{}: {}", display(path), e))?;
         if header {
             let header_text = format!("== {} ==\n", display(path));
-            total += header_text.as_bytes().len();
+            total += header_text.len();
             out.write_all(header_text.as_bytes())?;
         }
-        total += bytes.as_bytes().len();
+        total += bytes.len();
         out.write_all(bytes.as_bytes())?;
 
-        if let Some(sep) = separator {
-            if idx + 1 < paths.len() {
-                total += sep.as_bytes().len();
-                out.write_all(sep.as_bytes())?;
-            }
+        if let Some(sep) = separator && idx + 1 < paths.len() {
+            total += sep.len();
+            out.write_all(sep.as_bytes())?;
         }
     }
 
@@ -420,7 +416,7 @@ fn preferred_clipboard_tools() -> Vec<ClipboardTool> {
     Vec::new()
 }
 
-fn display(path: &PathBuf) -> String {
+fn display(path: &std::path::Path) -> String {
     path.as_os_str().to_string_lossy().into_owned()
 }
 
@@ -474,7 +470,7 @@ mod tests {
         write_file(&ignored, "skip").unwrap();
         write_file(&dir.join(".gitignore"), "*.log\n").unwrap();
 
-        let files = collect_files(&[dir.clone()]).unwrap();
+        let files = collect_files(std::slice::from_ref(&dir)).unwrap();
         let names: Vec<_> = files
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
@@ -513,7 +509,7 @@ mod tests {
         let file = dir.join("file.txt");
         write_file(&file, "body").unwrap();
 
-        let combined = gather_contents(&[file.clone()], None, true).unwrap();
+        let combined = gather_contents(std::slice::from_ref(&file), None, true).unwrap();
         let text = combined.replace(display(&file).as_str(), "PATH");
         assert_eq!(text, "== PATH ==\nbody");
     }
