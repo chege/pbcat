@@ -32,7 +32,15 @@ struct CopySummary {
 
 struct Options {
     separator: Option<String>,
+    header: bool,
+    sort: SortMode,
     inputs: Vec<PathBuf>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SortMode {
+    Args,
+    Name,
 }
 
 const SKIP_DIR_NAMES: &[&str] = &[
@@ -54,11 +62,12 @@ fn run() -> Result<CopySummary, Box<dyn Error>> {
     let options = parse_args()?;
 
     let files = collect_files(&options.inputs)?;
+    let files = order_files(files, options.sort);
     if files.is_empty() {
         return Err("No files to copy".into());
     }
 
-    let contents = gather_contents(&files, options.separator.as_deref())?;
+    let contents = gather_contents(&files, options.separator.as_deref(), options.header)?;
     copy_to_clipboard(&contents)?;
 
     Ok(CopySummary {
@@ -70,6 +79,8 @@ fn run() -> Result<CopySummary, Box<dyn Error>> {
 fn parse_args() -> Result<Options, Box<dyn Error>> {
     let mut inputs = Vec::new();
     let mut separator: Option<String> = None;
+    let mut header = false;
+    let mut sort = SortMode::Args;
     let mut args = env::args_os().skip(1).peekable();
     let mut end_of_options = false;
 
@@ -90,6 +101,15 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
                 );
                 continue;
             }
+            if arg == "-H" || arg == "--header" {
+                header = true;
+                continue;
+            }
+            if arg == "--sort" {
+                let value = args.next().ok_or("Missing value for --sort")?;
+                sort = parse_sort(&value)?;
+                continue;
+            }
             if arg.to_string_lossy().starts_with('-') && arg != "-" {
                 return Err(format!("Unknown option: {}", arg.to_string_lossy()).into());
             }
@@ -98,10 +118,29 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
     }
 
     if inputs.is_empty() {
-        return Err("Usage: pbcat [-s <separator>] <file|dir> [more ...]".into());
+        return Err(
+            "Usage: pbcat [-s <separator>] [-H|--header] [--sort name|args] <file|dir> [more ...]"
+                .into(),
+        );
     }
 
-    Ok(Options { separator, inputs })
+    Ok(Options {
+        separator,
+        header,
+        sort,
+        inputs,
+    })
+}
+
+fn parse_sort(value: &std::ffi::OsStr) -> Result<SortMode, Box<dyn Error>> {
+    let value = value
+        .to_str()
+        .ok_or("Sort value must be valid UTF-8 (args|name)")?;
+    match value {
+        "args" => Ok(SortMode::Args),
+        "name" => Ok(SortMode::Name),
+        _ => Err("Sort must be one of: args, name".into()),
+    }
 }
 
 fn collect_files(inputs: &[PathBuf]) -> Result<Vec<PathBuf>, Box<dyn Error>> {
@@ -122,6 +161,16 @@ fn collect_files(inputs: &[PathBuf]) -> Result<Vec<PathBuf>, Box<dyn Error>> {
     }
 
     Ok(files)
+}
+
+fn order_files(mut files: Vec<PathBuf>, sort: SortMode) -> Vec<PathBuf> {
+    match sort {
+        SortMode::Args => files,
+        SortMode::Name => {
+            files.sort_by(|a, b| a.cmp(b));
+            files
+        }
+    }
 }
 
 fn collect_dir(dir: &PathBuf, files: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) -> Result<(), Box<dyn Error>> {
@@ -170,7 +219,7 @@ fn should_skip_dir(entry: &DirEntry) -> bool {
         .unwrap_or(false)
 }
 
-fn gather_contents(paths: &[PathBuf], separator: Option<&str>) -> Result<String, Box<dyn Error>> {
+fn gather_contents(paths: &[PathBuf], separator: Option<&str>, header: bool) -> Result<String, Box<dyn Error>> {
     let mut buffer = String::new();
 
     for (idx, path) in paths.iter().enumerate() {
@@ -182,6 +231,9 @@ fn gather_contents(paths: &[PathBuf], separator: Option<&str>) -> Result<String,
         let bytes = fs::read(path).map_err(|e| format!("{}: {}", display(path), e))?;
         let text = String::from_utf8(bytes)
             .map_err(|_| format!("{}: not valid UTF-8", display(path)))?;
+        if header {
+            buffer.push_str(&format!("== {} ==\n", display(path)));
+        }
         buffer.push_str(&text);
         if let Some(sep) = separator {
             if idx + 1 < paths.len() {
@@ -278,7 +330,7 @@ mod tests {
         write_file(&first, "hello").unwrap();
         write_file(&second, "world").unwrap();
 
-        let combined = gather_contents(&[first, second], None).unwrap();
+        let combined = gather_contents(&[first, second], None, false).unwrap();
         assert_eq!(combined, "helloworld");
     }
 
@@ -288,14 +340,14 @@ mod tests {
         let subdir = dir.join("folder");
         fs::create_dir(&subdir).unwrap();
 
-        let err = gather_contents(&[subdir], None).unwrap_err();
+        let err = gather_contents(&[subdir], None, false).unwrap_err();
         assert!(err.to_string().contains("not a file"));
     }
 
     #[test]
     fn errors_on_missing_file() {
         let missing = tempdir().join("missing.txt");
-        let err = gather_contents(&[missing], None).unwrap_err();
+        let err = gather_contents(&[missing], None, false).unwrap_err();
         assert!(err.to_string().contains("No such file"));
     }
 
@@ -345,8 +397,35 @@ mod tests {
         write_file(&first, "alpha").unwrap();
         write_file(&second, "beta").unwrap();
 
-        let combined = gather_contents(&[first, second], Some("\n---\n")).unwrap();
+        let combined = gather_contents(&[first, second], Some("\n---\n"), false).unwrap();
         assert_eq!(combined, "alpha\n---\nbeta");
+    }
+
+    #[test]
+    fn adds_headers_when_enabled() {
+        let dir = tempdir();
+        let file = dir.join("file.txt");
+        write_file(&file, "body").unwrap();
+
+        let combined = gather_contents(&[file.clone()], None, true).unwrap();
+        let text = combined.replace(display(&file).as_str(), "PATH");
+        assert_eq!(text, "== PATH ==\nbody");
+    }
+
+    #[test]
+    fn sorts_by_name_when_requested() {
+        let dir = tempdir();
+        let b = dir.join("b.txt");
+        let a = dir.join("a.txt");
+        write_file(&a, "a").unwrap();
+        write_file(&b, "b").unwrap();
+
+        let files = order_files(vec![b.clone(), a.clone()], SortMode::Name);
+        let names: Vec<_> = files
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["a.txt", "b.txt"]);
     }
 
     #[test]
