@@ -67,12 +67,11 @@ fn run() -> Result<CopySummary, Box<dyn Error>> {
         return Err("No files to copy".into());
     }
 
-    let contents = gather_contents(&files, options.separator.as_deref(), options.header)?;
-    copy_to_clipboard(&contents)?;
+    let bytes = copy_files_to_clipboard(&files, options.separator.as_deref(), options.header)?;
 
     Ok(CopySummary {
         files: files.len(),
-        bytes: contents.as_bytes().len(),
+        bytes,
     })
 }
 
@@ -227,6 +226,7 @@ fn should_skip_dir(entry: &DirEntry) -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(test)]
 fn gather_contents(
     paths: &[PathBuf],
     separator: Option<&str>,
@@ -257,44 +257,79 @@ fn gather_contents(
     Ok(buffer)
 }
 
-fn copy_to_clipboard(data: &str) -> Result<(), Box<dyn Error>> {
-    if let Ok(path) = env::var("PBCAT_CLIPBOARD_FILE") {
-        fs::write(path, data)?;
-        return Ok(());
-    }
+fn write_files<W: Write>(
+    paths: &[PathBuf],
+    separator: Option<&str>,
+    header: bool,
+    mut out: W,
+) -> Result<usize, Box<dyn Error>> {
+    let mut total = 0usize;
 
-    for tool in preferred_clipboard_tools() {
-        if attempt_copy(tool, data).is_ok() {
-            return Ok(());
+    for (idx, path) in paths.iter().enumerate() {
+        let bytes = fs::read_to_string(path).map_err(|e| format!("{}: {}", display(path), e))?;
+        if header {
+            let header_text = format!("== {} ==\n", display(path));
+            total += header_text.as_bytes().len();
+            out.write_all(header_text.as_bytes())?;
+        }
+        total += bytes.as_bytes().len();
+        out.write_all(bytes.as_bytes())?;
+
+        if let Some(sep) = separator {
+            if idx + 1 < paths.len() {
+                total += sep.as_bytes().len();
+                out.write_all(sep.as_bytes())?;
+            }
         }
     }
 
-    Err("No supported clipboard utility found (tried pbcopy/wl-copy/xclip/xsel)".into())
+    Ok(total)
+}
+
+fn copy_files_to_clipboard(
+    files: &[PathBuf],
+    separator: Option<&str>,
+    header: bool,
+    ) -> Result<usize, Box<dyn Error>> {
+    if let Ok(path) = env::var("PBCAT_CLIPBOARD_FILE") {
+        let file = fs::File::create(path)?;
+        return write_files(files, separator, header, file);
+    }
+
+    let mut last_err: Option<String> = None;
+    for tool in preferred_clipboard_tools() {
+        match Command::new(tool.program)
+            .args(tool.args)
+            .stdin(Stdio::piped())
+            .spawn()
+        {
+            Ok(mut child) => {
+                if let Some(mut stdin) = child.stdin.take() {
+                    let write_result = write_files(files, separator, header, &mut stdin);
+                    drop(stdin);
+                    let status = child.wait()?;
+                    if status.success() && write_result.is_ok() {
+                        return write_result;
+                    }
+                    last_err = Some(format!("{} exited with status {}", tool.program, status));
+                } else {
+                    last_err = Some("failed to open stdin".into());
+                }
+            }
+            Err(e) => {
+                last_err = Some(format!("{}: {}", tool.program, e));
+            }
+        }
+    }
+
+    Err(last_err.unwrap_or_else(|| {
+        "No supported clipboard utility found (tried pbcopy/wl-copy/xclip/xsel)".to_string()
+    }).into())
 }
 
 struct ClipboardTool {
     program: &'static str,
     args: &'static [&'static str],
-}
-
-fn attempt_copy(tool: ClipboardTool, data: &str) -> Result<(), Box<dyn Error>> {
-    let mut child = Command::new(tool.program)
-        .args(tool.args)
-        .stdin(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("{}: {}", tool.program, e))?;
-
-    {
-        let mut stdin = child.stdin.take().ok_or("failed to open stdin")?;
-        stdin.write_all(data.as_bytes())?;
-    }
-
-    let status = child.wait()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("{} exited with status {}", tool.program, status).into())
-    }
 }
 
 #[cfg(target_os = "macos")]
