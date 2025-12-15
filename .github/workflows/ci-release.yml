@@ -14,7 +14,7 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - name: Build (Linux x86_64)
         run: |
@@ -23,7 +23,7 @@ jobs:
           cp target/release/pbcat dist/pbcat-linux-x86_64
           tar -czf dist/pbcat-linux-x86_64.tar.gz -C dist pbcat-linux-x86_64
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: linux-x86_64
           path: dist/pbcat-linux-x86_64.tar.gz
@@ -32,7 +32,7 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - name: Build (macOS universal)
         run: |
@@ -46,7 +46,7 @@ jobs:
             -output dist/pbcat-macos-universal
           tar -czf dist/pbcat-macos-universal.tar.gz -C dist pbcat-macos-universal
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: macos-universal
           path: dist/pbcat-macos-universal.tar.gz
@@ -56,16 +56,16 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [build-linux, build-macos]
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: linux-x86_64
           path: dist
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: macos-universal
           path: dist
       - name: Delete existing 'latest' release (if any)
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner;
